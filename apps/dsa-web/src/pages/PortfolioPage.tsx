@@ -1518,7 +1518,7 @@ const PortfolioPage: React.FC = () => {
               {eventType === 'trade' && tradeEvents.map((item) => (
                 <div key={`t-${item.id}`} className="flex items-start justify-between gap-3 border-b border-white/5 py-2 text-xs text-secondary">
                   <div className="min-w-0">
-                    {item.tradeDate} {formatSideLabel(item.side, language)} {item.symbol} 数量={item.quantity} 价格={item.price}
+                    {item.tradeDate} {formatSideLabel(item.side, language)} {item.symbol} {text.eventQty}={item.quantity} {text.eventPrice}={item.price}
                   </div>
                   {!writeBlocked ? (
                     <button
