@@ -7,6 +7,8 @@ import type {
   PortfolioPositionItem,
   PortfolioSide,
 } from '../types/portfolio';
+import type { UiLanguage } from '../i18n/uiText';
+import { PORTFOLIO_CASH_DIRECTION_LABELS, PORTFOLIO_CORPORATE_ACTION_LABELS, PORTFOLIO_SIDE_LABELS } from '../locales/featureText';
 import { toDateInputValue } from './format';
 
 export type FxRefreshFeedback = {
@@ -64,16 +66,16 @@ export function getPositionPriceLabel(row: PortfolioPositionItem): string {
   return row.priceSource || '未知来源';
 }
 
-export function formatSideLabel(value: PortfolioSide): string {
-  return value === 'buy' ? '买入' : '卖出';
+export function formatSideLabel(value: PortfolioSide, language: UiLanguage = 'zh'): string {
+  return PORTFOLIO_SIDE_LABELS[language][value];
 }
 
-export function formatCashDirectionLabel(value: PortfolioCashDirection): string {
-  return value === 'in' ? '流入' : '流出';
+export function formatCashDirectionLabel(value: PortfolioCashDirection, language: UiLanguage = 'zh'): string {
+  return PORTFOLIO_CASH_DIRECTION_LABELS[language][value];
 }
 
-export function formatCorporateActionLabel(value: PortfolioCorporateActionType): string {
-  return value === 'cash_dividend' ? '现金分红' : '拆并股调整';
+export function formatCorporateActionLabel(value: PortfolioCorporateActionType, language: UiLanguage = 'zh'): string {
+  return PORTFOLIO_CORPORATE_ACTION_LABELS[language][value];
 }
 
 export function formatBrokerLabel(value: string, displayName?: string): string {
