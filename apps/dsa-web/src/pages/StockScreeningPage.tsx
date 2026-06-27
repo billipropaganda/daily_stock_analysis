@@ -1300,8 +1300,8 @@ const StockScreeningPage: React.FC = () => {
 
         {candidates.length === 0 ? (
           <div className="rounded-xl border border-dashed border-border bg-surface/70 px-5 py-10 text-center">
-            <p className=”text-sm font-medium text-foreground”>{text.noResultsTitle}</p>
-            <p className=”mt-2 text-sm text-secondary-text”>{text.noResultsDescription}</p>
+            <p className="text-sm font-medium text-foreground">{text.noResultsTitle}</p>
+            <p className="mt-2 text-sm text-secondary-text">{text.noResultsDescription}</p>
           </div>
         ) : (
           <div className="overflow-hidden rounded-xl border border-border">
