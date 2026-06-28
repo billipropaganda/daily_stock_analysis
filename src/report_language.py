@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 from typing import Any, Dict, Optional
 
@@ -846,3 +847,330 @@ def get_sentiment_label(score: int, language: Optional[str]) -> str:
     if score >= 20:
         return "悲观"
     return "极度悲观"
+
+
+# ---------------------------------------------------------------------------
+# General-purpose i18n for log messages, CLI output, API responses
+# ---------------------------------------------------------------------------
+
+_GENERAL_TEXT: Dict[str, Dict[str, str]] = {
+    "zh": {
+        # ── main.py startup / lifecycle ──
+        "app_starting": "正在启动 {}...",
+        "app_config_init": "正在初始化配置...",
+        "app_fastapi_started": "FastAPI 服务已启动: {}",
+        "app_not_run_immediately": "配置为不立即运行分析 (RUN_IMMEDIATELY=false)",
+        "app_execution_complete": "程序执行完成",
+        "app_api_running": "API 服务运行中 (按 Ctrl+C 退出)...",
+        "app_worker_running": "分析工作器运行中 (按 Ctrl+C 退出)...",
+        "app_worker_starting": "正在启动后台分析工作器...",
+        "app_worker_started": "后台分析工作器已启动",
+        "app_api_listening": "API 服务监听: {}",
+        "app_worker_stopped": "后台分析工作器已停止",
+        "app_shutting_down": "正在关闭...",
+        "app_shutdown_complete": "关闭完成",
+        "app_error_detail": "错误详情: {}",
+        "app_fatal_error": "发生致命错误: {}",
+        "app_frontend_ready": "前端构建就绪",
+        "app_frontend_not_ready": "前端静态资源未就绪，继续启动 FastAPI 服务（Web 页面可能不可用）",
+        "app_frontend_build_failed": "前端命令执行失败（exit_code={exit_code}）: {cmd}",
+        "app_frontend_building": "正在构建前端资源...",
+        "app_scheduler_thread": "定时任务线程",
+        "app_analysis_complete": "{} 分析已完成",
+        "app_analysis_failed": "{} 分析失败",
+
+        # ── Log prefixes / common ──
+        "log_prefix_info": "信息",
+        "log_prefix_warn": "警告",
+        "log_prefix_error": "错误",
+        "log_prefix_debug": "调试",
+
+        # ── API common ──
+        "api_internal_error": "内部服务器错误",
+        "api_not_found": "未找到",
+        "api_bad_request": "请求参数无效",
+        "api_unauthorized": "未授权",
+        "api_forbidden": "禁止访问",
+        "api_too_many_requests": "请求过于频繁",
+
+        # ── Notification ──
+        "notif_channel_wechat": "企业微信",
+        "notif_channel_feishu": "飞书",
+        "notif_channel_telegram": "Telegram",
+        "notif_channel_email": "邮件",
+        "notif_channel_slack": "Slack",
+        "notif_send_success": "通知发送成功 ({channel})",
+        "notif_send_failure": "通知发送失败 ({channel}): {detail}",
+        "notif_channel_disabled": "通知渠道已禁用: {channel}",
+
+        # ── Analysis / market ──
+        "analysis_submitted": "已提交 {symbol} 分析任务：{task_id}",
+        "analysis_task_queued": "分析任务已加入队列: {task_id}",
+        "analysis_task_running": "正在分析: {symbol}",
+        "analysis_task_complete": "分析完成: {symbol}",
+        "analysis_task_failed": "分析失败: {symbol} - {detail}",
+        "analysis_no_results": "无分析结果",
+        "market_morning_greeting": "早上好",
+        "market_afternoon_greeting": "下午好",
+        "market_evening_greeting": "晚上好",
+        "market_session_morning": "早盘",
+        "market_session_afternoon": "午盘",
+        "market_session_closed": "已收盘",
+        "market_session_pre": "盘前",
+        "market_session_post": "盘后",
+        "market_closed_today": "今日休市",
+        "market_open_today": "今日开市",
+
+        # ── Scheduler ──
+        "scheduler_starting": "正在启动定时任务调度器...",
+        "scheduler_started": "定时任务调度器已启动",
+        "scheduler_stopped": "定时任务调度器已停止",
+        "scheduler_next_run": "下次执行: {time}",
+        "scheduler_skip_holiday": "今日休市，跳过定时任务",
+        "scheduler_task_start": "开始执行定时任务: {name}",
+        "scheduler_task_done": "定时任务完成: {name}",
+        "scheduler_task_failed": "定时任务失败: {name} - {detail}",
+
+        # ── Data provider ──
+        "data_fetch_start": "正在从 {source} 获取 {symbol} 数据...",
+        "data_fetch_done": "{source} 数据获取完成: {symbol} ({count} 条)",
+        "data_fetch_failed": "数据获取失败 ({source}): {detail}",
+        "data_fetch_empty": "{source} 未返回 {symbol} 数据",
+        "data_fetch_rate_limited": "{source} 请求被限流，等待 {seconds}s 后重试",
+        "data_source_fallback": "{source} 不可用，回退到 {fallback}",
+        "data_cache_hit": "命中缓存: {key}",
+        "data_cache_miss": "缓存未命中: {key}",
+
+        # ── main.py lifecycle ──
+        "app_bootstrap_log_failed": "Bootstrap 日志初始化失败，已回退到 stderr: {}",
+        "app_config_load_failed": "加载配置失败: {}",
+        "app_log_switch_failed": "切换到配置日志目录失败: {}",
+        "app_system_start": "A股自选股智能分析系统 启动",
+        "app_runtime": "运行时间: {}",
+        "app_market_review_running": "大盘复盘正在执行中，跳过本次大盘复盘",
+        "app_stock_index_refreshed": "[stock-index] 分析前已刷新股票索引缓存: {}",
+        "app_stock_index_incomplete": "[stock-index] 分析前刷新未完成，继续使用本地索引: {}",
+        "app_stock_index_failed": "[stock-index] 分析前刷新股票索引失败，继续执行分析: {}",
+        "app_all_markets_holiday": "今日所有相关市场均为非交易日，跳过执行。可使用 --force-run 强制执行。",
+        "app_holiday_skipped": "今日休市股票已跳过: {}",
+        "app_context_reuse_skip": "复盘上下文可复用，跳过重复大盘复盘并复用上下文内容。",
+        "app_context_reuse_push_ok": "复用本轮大盘上下文推送大盘复盘成功",
+        "app_context_reuse_push_fail": "复用本轮大盘上下文推送大盘复盘失败",
+        "app_waiting_market_review": "等待 {} 秒后执行大盘复盘（避免API限流）...",
+        "app_combined_push_ok": "已合并推送（个股+大盘复盘）",
+        "app_combined_push_fail": "合并推送失败",
+        "app_summary_header": "===== 分析结果摘要 =====",
+        "app_execution_done": "任务执行完成",
+        "app_creating_feishu_doc": "正在创建飞书云文档...",
+        "app_feishu_doc_created": "飞书云文档创建成功: {}",
+        "app_feishu_doc_failed": "飞书文档生成失败: {}",
+        "app_feishu_doc_notify": "[{}] 复盘文档创建成功: {}",
+        "app_auto_backtest_start": "开始自动回测...",
+        "app_auto_backtest_done": "自动回测完成: processed={processed} saved={saved} failed={failed}",
+        "app_auto_backtest_failed": "自动回测失败（已忽略）: {}",
+        "app_analysis_flow_failed": "分析流程执行失败: {}",
+        "app_fastapi_exited": "FastAPI 服务器启动后立即退出: {}",
+        "app_fastapi_timeout": "FastAPI 服务在 {}s 内未完成启动: {}",
+        "app_schedule_stocks_param": "定时模式下检测到 --stocks 参数；计划执行将忽略启动时股票快照，并在每次运行前重新读取最新的 STOCK_LIST。",
+        "app_cli_stock_list": "使用命令行指定的股票列表: {}",
+        "app_config_loading": "正在加载配置...",
+        "app_config_validating": "正在验证配置...",
+        "app_market_review_reuse_fail": "复用大盘上下文保存大盘复盘报告失败: {}",
+        "app_score_format": "评分 {score} | {trend}",
+        "app_web_not_started": "Web 界面未启动（使用 --serve 参数启用）",
+        "app_feishu_lock": "飞书文档生成功能未启用或加锁失败，跳过",
+        "app_config_file_fail": "读取配置文件 {} 失败，继续沿用当前环境变量: {}",
+        "app_log_init_fail": "文件日志初始化失败，已降级为控制台日志输出；日志目录 {dir!r} 当前不可写或不可创建: {exc}。官方 Docker 镜像启动入口会自动修复默认挂载目录权限；若仍失败，请检查是否使用了 --user、只读挂载、rootless Docker 或 NFS 等限制写入的环境。",
+        "app_user_interrupt": "用户中断，程序退出",
+        "app_program_failed": "程序执行失败: {}",
+        "app_web_startup_failed": "启动 FastAPI 服务失败: {}",
+        "app_web_running": "Web 服务运行中: {}",
+        "app_api_trigger": "通过 /api/v1/analysis/analyze 接口触发分析",
+        "app_api_docs": "API 文档: {}",
+        "app_ctrl_c_exit": "按 Ctrl+C 退出...",
+        "app_mode_web_only": "模式: 仅 Web 服务",
+        "app_mode_backtest": "模式: 回测",
+        "app_mode_market_review_only": "模式: 仅大盘复盘",
+        "app_mode_web_api_scheduler": "模式: Web/API runtime scheduler",
+        "app_mode_schedule": "模式: 定时任务",
+        "app_market_review_holiday": "今日大盘复盘相关市场均为非交易日，跳过执行。可使用 --force-run 强制执行。",
+        "app_scheduler_takeover": "Web/API runtime scheduler 已接管定时任务，保存设置会作用于当前进程",
+        "app_daily_exec_time": "每日执行时间: {}",
+        "app_run_immediately": "启动时立即执行: {}",
+        "app_event_monitor": "[EventMonitor] 本轮触发 {} 条提醒",
+        "app_context_reuse_msg": "复盘上下文可复用，跳过重复大盘复盘并复用上下文内容。",
+        "app_waiting_review": "等待 {} 秒后执行大盘复盘（避免API限流）...",
+    },
+    "en": {
+        "app_starting": "Starting {}...",
+        "app_config_init": "Initializing configuration...",
+        "app_fastapi_started": "FastAPI server started: {}",
+        "app_not_run_immediately": "Configured not to run analysis immediately (RUN_IMMEDIATELY=false)",
+        "app_execution_complete": "Execution complete",
+        "app_api_running": "API server running (press Ctrl+C to exit)...",
+        "app_worker_running": "Analysis worker running (press Ctrl+C to exit)...",
+        "app_worker_starting": "Starting background analysis worker...",
+        "app_worker_started": "Background analysis worker started",
+        "app_api_listening": "API server listening: {}",
+        "app_worker_stopped": "Background analysis worker stopped",
+        "app_shutting_down": "Shutting down...",
+        "app_shutdown_complete": "Shutdown complete",
+        "app_error_detail": "Error detail: {}",
+        "app_fatal_error": "Fatal error: {}",
+        "app_frontend_ready": "Frontend build ready",
+        "app_frontend_not_ready": "Frontend static assets not ready, continuing FastAPI startup (web UI may be unavailable)",
+        "app_frontend_build_failed": "Frontend command failed (exit_code={exit_code}): {cmd}",
+        "app_frontend_building": "Building frontend assets...",
+        "app_scheduler_thread": "Scheduler thread",
+        "app_analysis_complete": "{} analysis complete",
+        "app_analysis_failed": "{} analysis failed",
+
+        "log_prefix_info": "INFO",
+        "log_prefix_warn": "WARN",
+        "log_prefix_error": "ERROR",
+        "log_prefix_debug": "DEBUG",
+
+        "api_internal_error": "Internal server error",
+        "api_not_found": "Not found",
+        "api_bad_request": "Invalid request parameters",
+        "api_unauthorized": "Unauthorized",
+        "api_forbidden": "Forbidden",
+        "api_too_many_requests": "Too many requests",
+
+        "notif_channel_wechat": "WeChat Work",
+        "notif_channel_feishu": "Feishu",
+        "notif_channel_telegram": "Telegram",
+        "notif_channel_email": "Email",
+        "notif_channel_slack": "Slack",
+        "notif_send_success": "Notification sent ({channel})",
+        "notif_send_failure": "Notification failed ({channel}): {detail}",
+        "notif_channel_disabled": "Notification channel disabled: {channel}",
+
+        "analysis_submitted": "Submitted {symbol} analysis task: {task_id}",
+        "analysis_task_queued": "Analysis task queued: {task_id}",
+        "analysis_task_running": "Analyzing: {symbol}",
+        "analysis_task_complete": "Analysis complete: {symbol}",
+        "analysis_task_failed": "Analysis failed: {symbol} - {detail}",
+        "analysis_no_results": "No analysis results",
+        "market_morning_greeting": "Good morning",
+        "market_afternoon_greeting": "Good afternoon",
+        "market_evening_greeting": "Good evening",
+        "market_session_morning": "Morning session",
+        "market_session_afternoon": "Afternoon session",
+        "market_session_closed": "Market closed",
+        "market_session_pre": "Pre-market",
+        "market_session_post": "After-hours",
+        "market_closed_today": "Market closed today",
+        "market_open_today": "Market open today",
+
+        "scheduler_starting": "Starting task scheduler...",
+        "scheduler_started": "Task scheduler started",
+        "scheduler_stopped": "Task scheduler stopped",
+        "scheduler_next_run": "Next run: {time}",
+        "scheduler_skip_holiday": "Market closed today, skipping scheduled tasks",
+        "scheduler_task_start": "Starting scheduled task: {name}",
+        "scheduler_task_done": "Scheduled task complete: {name}",
+        "scheduler_task_failed": "Scheduled task failed: {name} - {detail}",
+
+        "data_fetch_start": "Fetching {symbol} data from {source}...",
+        "data_fetch_done": "{source} data fetch complete: {symbol} ({count} records)",
+        "data_fetch_failed": "Data fetch failed ({source}): {detail}",
+        "data_fetch_empty": "{source} returned no data for {symbol}",
+        "data_fetch_rate_limited": "{source} rate limited, retrying in {seconds}s",
+        "data_source_fallback": "{source} unavailable, falling back to {fallback}",
+        "data_cache_hit": "Cache hit: {key}",
+        "data_cache_miss": "Cache miss: {key}",
+
+        "app_bootstrap_log_failed": "Bootstrap log init failed, falling back to stderr: {}",
+        "app_config_load_failed": "Failed to load config: {}",
+        "app_log_switch_failed": "Failed to switch to config log directory: {}",
+        "app_system_start": "A-share Stock Analysis System starting",
+        "app_runtime": "Runtime: {}",
+        "app_market_review_running": "Market review already in progress, skipping",
+        "app_stock_index_refreshed": "[stock-index] Stock index cache refreshed before analysis: {}",
+        "app_stock_index_incomplete": "[stock-index] Index refresh incomplete, continuing with local index: {}",
+        "app_stock_index_failed": "[stock-index] Stock index refresh failed, continuing analysis: {}",
+        "app_all_markets_holiday": "All relevant markets are closed today. Use --force-run to override.",
+        "app_holiday_skipped": "Holiday stocks skipped: {}",
+        "app_context_reuse_skip": "Context reusable, skipping duplicate market review.",
+        "app_context_reuse_push_ok": "Reused market context push succeeded",
+        "app_context_reuse_push_fail": "Reused market context push failed",
+        "app_waiting_market_review": "Waiting {}s before market review (API rate limit)...",
+        "app_combined_push_ok": "Combined push sent (stocks + market review)",
+        "app_combined_push_fail": "Combined push failed",
+        "app_summary_header": "===== Analysis Summary =====",
+        "app_execution_done": "Execution complete",
+        "app_creating_feishu_doc": "Creating Feishu document...",
+        "app_feishu_doc_created": "Feishu document created: {}",
+        "app_feishu_doc_failed": "Feishu document generation failed: {}",
+        "app_feishu_doc_notify": "[{}] Market review document: {}",
+        "app_auto_backtest_start": "Starting auto backtest...",
+        "app_auto_backtest_done": "Auto backtest complete: processed={processed} saved={saved} failed={failed}",
+        "app_auto_backtest_failed": "Auto backtest failed (ignored): {}",
+        "app_analysis_flow_failed": "Analysis flow failed: {}",
+        "app_fastapi_exited": "FastAPI server exited immediately after start: {}",
+        "app_fastapi_timeout": "FastAPI server did not start within {}s: {}",
+        "app_schedule_stocks_param": "--stocks detected in schedule mode; startup snapshot will be ignored and STOCK_LIST re-read before each run.",
+        "app_cli_stock_list": "Using CLI-specified stock list: {}",
+        "app_config_loading": "Loading configuration...",
+        "app_config_validating": "Validating configuration...",
+        "app_market_review_reuse_fail": "Failed to save market review report from context reuse: {}",
+        "app_score_format": "Score {score} | {trend}",
+        "app_web_not_started": "Web UI not started (use --serve to enable)",
+        "app_feishu_lock": "Feishu document generation disabled or lock failed, skipping",
+        "app_config_file_fail": "Failed to read config file {}, continuing with environment variables: {}",
+        "app_log_init_fail": "File log init failed, downgraded to console output; log dir {dir!r} is not writable or cannot be created: {exc}. Official Docker image entrypoint auto-fixes default mount permissions; if this persists, check for --user, read-only mounts, rootless Docker, or NFS restrictions.",
+        "app_user_interrupt": "User interrupted, exiting",
+        "app_program_failed": "Program failed: {}",
+        "app_web_startup_failed": "Failed to start FastAPI: {}",
+        "app_web_running": "Web server running: {}",
+        "app_api_trigger": "Trigger analysis via /api/v1/analysis/analyze",
+        "app_api_docs": "API docs: {}",
+        "app_ctrl_c_exit": "Press Ctrl+C to exit...",
+        "app_mode_web_only": "Mode: Web only",
+        "app_mode_backtest": "Mode: Backtest",
+        "app_mode_market_review_only": "Mode: Market review only",
+        "app_mode_web_api_scheduler": "Mode: Web/API runtime scheduler",
+        "app_mode_schedule": "Mode: Scheduled tasks",
+        "app_market_review_holiday": "All markets for market review are closed today. Use --force-run to override.",
+        "app_scheduler_takeover": "Web/API runtime scheduler managing tasks; saved settings apply to current process",
+        "app_daily_exec_time": "Daily execution time: {}",
+        "app_run_immediately": "Run immediately on start: {}",
+        "app_event_monitor": "[EventMonitor] {} alerts triggered this round",
+        "app_context_reuse_msg": "Context reusable, skipping duplicate market review with context reuse.",
+        "app_waiting_review": "Waiting {}s before market review (API rate limit)...",
+    },
+}
+
+
+def _resolve_language(language: Optional[str] = None) -> str:
+    """Resolve language from explicit arg, env var, or default to zh."""
+    if language:
+        return normalize_report_language(language)
+    env_lang = os.environ.get("REPORT_LANGUAGE")
+    if env_lang:
+        return normalize_report_language(env_lang)
+    return "zh"
+
+
+def gt(key: str, *args: Any, language: Optional[str] = None, **params: Any) -> str:
+    """Get a translated UI string by key.
+
+    Args:
+        key: Translation key in _GENERAL_TEXT.
+        *args: Positional format parameters for {} placeholders.
+        language: 'zh' or 'en'. Defaults to REPORT_LANGUAGE env var or 'zh'.
+        **params: Named format parameters for {name} placeholders.
+
+    Returns the translated string with params interpolated.
+    Falls back to zh if key is missing in the target language.
+    """
+    lang = _resolve_language(language)
+    text = _GENERAL_TEXT.get(lang, {}).get(key)
+    if text is None:
+        text = _GENERAL_TEXT.get("zh", {}).get(key, key)
+    if args:
+        text = text.format(*args)
+    if params:
+        text = text.format(**params)
+    return text

@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """
 ===================================
 A股自选股智能分析系统 - 主调度程序
@@ -68,6 +68,7 @@ from datetime import date, datetime, timezone, timedelta
 from src.webui_frontend import prepare_webui_frontend_assets
 from src.config import get_config, Config
 from src.logging_config import setup_logging
+from src.report_language import gt
 from src.services.stock_code_utils import resolve_index_stock_code_for_analysis
 
 
@@ -111,7 +112,7 @@ def _read_active_env_values() -> Optional[Dict[str, str]]:
     try:
         values = dotenv_values(env_path)
     except Exception as exc:  # pragma: no cover - defensive branch
-        logger.warning("读取配置文件 %s 失败，继续沿用当前环境变量: %s", env_path, exc)
+        logger.warning(gt("app_config_file_fail", path=env_path, detail=exc))
         return None
 
     return {
@@ -184,9 +185,7 @@ def _setup_runtime_logging(log_dir: str, debug: bool = False) -> bool:
         return True
     except OSError as exc:
         logger.warning(
-            "文件日志初始化失败，已降级为控制台日志输出；日志目录 %r 当前不可写或不可创建: %s。"
-            "官方 Docker 镜像启动入口会自动修复默认挂载目录权限；若仍失败，"
-            "请检查是否使用了 --user、只读挂载、rootless Docker 或 NFS 等限制写入的环境。",
+            gt("app_log_init_fail", dir=log_dir, exc=exc),
             log_dir,
             exc,
         )
@@ -474,7 +473,7 @@ def _run_market_review_with_shared_lock(
 
     lock_token = try_acquire_market_review_lock(config)
     if lock_token is None:
-        logger.warning("大盘复盘正在执行中，跳过本次大盘复盘")
+        logger.warning(gt("app_market_review_running"))
         return None
 
     try:
@@ -505,11 +504,11 @@ def _refresh_stock_index_cache_for_analysis(config: Config) -> None:
 
         result = refresh_remote_stock_index_cache(settings_from_config(config))
         if result.refreshed:
-            logger.info("[stock-index] 分析前已刷新股票索引缓存: %s", result.cache_path)
+            logger.info(gt("app_stock_index_refreshed", path=result.cache_path))
         elif result.error:
-            logger.debug("[stock-index] 分析前刷新未完成，继续使用本地索引: %s", result.error)
+            logger.debug(gt("app_stock_index_incomplete", detail=result.error))
     except Exception as exc:  # noqa: BLE001 - stock index freshness must not block analysis.
-        logger.warning("[stock-index] 分析前刷新股票索引失败，继续执行分析: %s", exc)
+        logger.warning(gt("app_stock_index_failed", detail=exc))
 
 
 def _prime_daily_market_context(
@@ -633,7 +632,7 @@ def _save_reused_market_review_report(
             filepath,
         )
     except Exception as exc:
-        logger.warning("复用大盘上下文保存大盘复盘报告失败: %s", exc)
+        logger.warning(gt("app_market_review_reuse_fail", detail=exc))
 
 
 def run_full_analysis(
@@ -667,12 +666,12 @@ def run_full_analysis(
         )
         if should_skip:
             logger.info(
-                "今日所有相关市场均为非交易日，跳过执行。可使用 --force-run 强制执行。"
+                gt("app_all_markets_holiday")
             )
             return True
         if set(filtered_codes) != set(effective_codes):
             skipped = set(effective_codes) - set(filtered_codes)
-            logger.info("今日休市股票已跳过: %s", skipped)
+            logger.info(gt("app_holiday_skipped", stocks=skipped))
         stock_codes = filtered_codes
 
         # 命令行参数 --single-notify 覆盖配置（#55）
@@ -804,7 +803,7 @@ def run_full_analysis(
             if can_skip_market_review:
                 market_report = market_context_full_report or market_context_summary
                 logger.info(
-                    "复盘上下文可复用，跳过重复大盘复盘并复用上下文内容。"
+                    gt("app_context_reuse_msg")
                 )
                 _save_reused_market_review_report(
                     pipeline.notifier,
@@ -824,14 +823,14 @@ def run_full_analysis(
                         email_send_to_all=True,
                         route_type="report",
                     ):
-                        logger.info("复用本轮大盘上下文推送大盘复盘成功")
+                        logger.info(gt("app_context_reuse_push_ok"))
                     else:
-                        logger.warning("复用本轮大盘上下文推送大盘复盘失败")
+                        logger.warning(gt("app_context_reuse_push_fail"))
 
             review_result = None
             if not can_skip_market_review:
                 if analysis_delay > 0:
-                    logger.info(f"等待 {analysis_delay} 秒后执行大盘复盘（避免API限流）...")
+                    logger.info(gt("app_waiting_review", analysis_delay))
                     time.sleep(analysis_delay)
 
                 review_result = _run_market_review_with_shared_lock(
@@ -889,21 +888,21 @@ def run_full_analysis(
                 combined_content = "\n\n---\n\n".join(parts)
                 if pipeline.notifier.is_available():
                     if pipeline.notifier.send(combined_content, email_send_to_all=True, route_type="report"):
-                        logger.info("已合并推送（个股+大盘复盘）")
+                        logger.info(gt("app_combined_push_ok"))
                     else:
-                        logger.warning("合并推送失败")
+                        logger.warning(gt("app_combined_push_fail"))
 
         # 输出摘要
         if results:
-            logger.info("\n===== 分析结果摘要 =====")
+            logger.info("\n" + gt("app_summary_header"))
             for r in sorted(results, key=lambda x: x.sentiment_score, reverse=True):
                 emoji = r.get_emoji()
                 logger.info(
                     f"{emoji} {r.name}({r.code}): {r.operation_advice} | "
-                    f"评分 {r.sentiment_score} | {r.trend_prediction}"
+                    gt("app_score_format", r.sentiment_score, r.trend_prediction)
                 )
 
-        logger.info("\n任务执行完成")
+        logger.info("\n" + gt("app_execution_done"))
 
         # === 新增：生成飞书云文档 ===
         try:
@@ -911,7 +910,7 @@ def run_full_analysis(
 
             feishu_doc = FeishuDocManager()
             if feishu_doc.is_configured() and (results or market_report):
-                logger.info("正在创建飞书云文档...")
+                logger.info(gt("app_creating_feishu_doc"))
 
                 # 1. 准备标题 "01-01 13:01大盘复盘"
                 tz_cn = timezone(timedelta(hours=8))
@@ -936,7 +935,7 @@ def run_full_analysis(
                 # 3. 创建文档
                 doc_url = feishu_doc.create_daily_doc(doc_title, full_content)
                 if doc_url:
-                    logger.info(f"飞书云文档创建成功: {doc_url}")
+                    logger.info(gt("app_feishu_doc_created", doc_url))
                     # 可选：将文档链接也推送到群里
                     if not args.no_notify:
                         pipeline.notifier.send(
@@ -945,14 +944,14 @@ def run_full_analysis(
                         )
 
         except Exception as e:
-            logger.error(f"飞书文档生成失败: {e}")
+            logger.error(gt("app_feishu_doc_failed", e))
 
         # === Auto backtest ===
         try:
             if getattr(config, 'backtest_enabled', False):
                 from src.services.backtest_service import BacktestService
 
-                logger.info("开始自动回测...")
+                logger.info(gt("app_auto_backtest_start"))
                 service = BacktestService()
                 stats = service.run_backtest(
                     force=False,
@@ -965,12 +964,12 @@ def run_full_analysis(
                     f"completed={stats.get('completed')} insufficient={stats.get('insufficient')} errors={stats.get('errors')}"
                 )
         except Exception as e:
-            logger.warning(f"自动回测失败（已忽略）: {e}")
+            logger.warning(gt("app_auto_backtest_failed", e))
 
         return True
 
     except Exception as e:
-        logger.exception(f"分析流程执行失败: {e}")
+        logger.exception(gt("app_analysis_flow_failed", e))
         if raise_errors:
             raise
         return False
@@ -1082,7 +1081,7 @@ def start_api_server(host: str, port: int, config: Config) -> None:
                 f"FastAPI server failed to start: {host}:{port}; {startup_error[0]}"
             )
         if uvicorn_server.started:
-            logger.info(f"FastAPI 服务已启动: http://{host}:{port}")
+            logger.info(gt("app_fastapi_started", url=f"http://{host}:{port}"))
             return
         if not thread.is_alive():
             break
@@ -1091,12 +1090,12 @@ def start_api_server(host: str, port: int, config: Config) -> None:
     if startup_error:
         raise RuntimeError(f"FastAPI server failed to start: {host}:{port}; {startup_error[0]}")
     if uvicorn_server.started:
-        logger.info(f"FastAPI 服务已启动: http://{host}:{port}")
+        logger.info(gt("app_fastapi_started", f"http://{host}:{port}"))
         return
     if not thread.is_alive():
-        raise RuntimeError(f"FastAPI 服务器启动后立即退出: {host}:{port}")
+        raise RuntimeError(gt("app_fastapi_exited", f"{host}:{port}"))
 
-    raise RuntimeError(f"FastAPI 服务在 {timeout_seconds:.1f}s 内未完成启动: {host}:{port}")
+    raise RuntimeError(gt("app_fastapi_timeout", timeout_seconds, f"{host}:{port}"))
 
 
 def _is_truthy_env(var_name: str, default: str = "true") -> bool:
@@ -1142,7 +1141,7 @@ def _resolve_scheduled_stock_codes(stock_codes: Optional[List[str]]) -> Optional
     """Scheduled runs should always read the latest persisted watchlist."""
     if stock_codes is not None:
         logger.warning(
-            "定时模式下检测到 --stocks 参数；计划执行将忽略启动时股票快照，并在每次运行前重新读取最新的 STOCK_LIST。"
+            gt("app_schedule_stocks_param")
         )
     return None
 
@@ -1230,25 +1229,25 @@ def main() -> int:
             format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
             stream=sys.stderr,
         )
-        logger.warning("Bootstrap 日志初始化失败，已回退到 stderr: %s", exc)
+        logger.warning(gt("app_bootstrap_log_failed", detail=exc))
 
     # 加载配置（在 bootstrap logging 之后执行，确保异常有日志）
     try:
         config = get_config()
     except Exception as exc:
-        logger.exception("加载配置失败: %s", exc)
+        logger.exception(gt("app_config_load_failed", detail=exc))
         return 1
 
     # 配置日志（输出到控制台和文件）
     try:
         _setup_runtime_logging(config.log_dir, debug=args.debug)
     except Exception as exc:
-        logger.exception("切换到配置日志目录失败: %s", exc)
+        logger.exception(gt("app_log_switch_failed", detail=exc))
         return 1
 
     logger.info("=" * 60)
-    logger.info("A股自选股智能分析系统 启动")
-    logger.info(f"运行时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    logger.info(gt("app_system_start"))
+    logger.info(gt("app_runtime", datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
     logger.info("=" * 60)
 
     # 验证配置
@@ -1274,7 +1273,7 @@ def main() -> int:
             for c in args.stocks.split(',')
             if (c or "").strip()
         ]
-        logger.info(f"使用命令行指定的股票列表: {stock_codes}")
+        logger.info(gt("app_cli_stock_list", stock_codes))
 
     # === 处理 --webui / --webui-only 参数，映射到 --serve / --serve-only ===
     if args.webui:
@@ -1341,12 +1340,12 @@ def main() -> int:
             "workers": getattr(args, "workers", None),
         })
         if not prepare_webui_frontend_assets():
-            logger.warning("前端静态资源未就绪，继续启动 FastAPI 服务（Web 页面可能不可用）")
+            logger.warning(gt("app_frontend_not_ready"))
         try:
             start_api_server(host=args.host, port=args.port, config=config)
             bot_clients_started = True
         except Exception as e:
-            logger.error(f"启动 FastAPI 服务失败: {e}")
+            logger.error(gt("app_web_startup_failed", e))
             if args.serve_only:
                 return 1
             start_serve = False
@@ -1356,22 +1355,22 @@ def main() -> int:
 
     # === 仅 Web 服务模式：不自动执行分析 ===
     if args.serve_only:
-        logger.info("模式: 仅 Web 服务")
-        logger.info(f"Web 服务运行中: http://{args.host}:{args.port}")
-        logger.info("通过 /api/v1/analysis/analyze 接口触发分析")
-        logger.info(f"API 文档: http://{args.host}:{args.port}/docs")
-        logger.info("按 Ctrl+C 退出...")
+        logger.info(gt("app_mode_web_only"))
+        logger.info(gt("app_web_running", f"http://{args.host}:{args.port}"))
+        logger.info(gt("app_api_trigger"))
+        logger.info(gt("app_api_docs", f"http://{args.host}:{args.port}/docs"))
+        logger.info(gt("app_ctrl_c_exit"))
         try:
             while True:
                 time.sleep(1)
         except KeyboardInterrupt:
-            logger.info("\n用户中断，程序退出")
+            logger.info("\n" + gt("app_user_interrupt"))
         return 0
 
     try:
         # 模式0: 回测
         if getattr(args, 'backtest', False):
-            logger.info("模式: 回测")
+            logger.info(gt("app_mode_backtest"))
             from src.services.backtest_service import BacktestService
 
             service = BacktestService()
@@ -1403,10 +1402,10 @@ def main() -> int:
                     getattr(config, 'market_review_region', 'cn') or 'cn', open_markets
                 )
                 if effective_region == '':
-                    logger.info("今日大盘复盘相关市场均为非交易日，跳过执行。可使用 --force-run 强制执行。")
+                    logger.info(gt("app_market_review_holiday"))
                     return 0
 
-            logger.info("模式: 仅大盘复盘")
+            logger.info(gt("app_mode_market_review_only"))
             notifier, analyzer, search_service = build_market_review_runtime(config)
 
             _run_market_review_with_shared_lock(
@@ -1424,19 +1423,19 @@ def main() -> int:
         # 模式2: 定时任务模式
         if args.schedule or config.schedule_enabled:
             if start_serve:
-                logger.info("模式: Web/API runtime scheduler")
-                logger.info(f"Web 服务运行中: http://{args.host}:{args.port}")
-                logger.info("Web/API runtime scheduler 已接管定时任务，保存设置会作用于当前进程")
-                logger.info("按 Ctrl+C 退出...")
+                logger.info(gt("app_mode_web_api_scheduler"))
+                logger.info(gt("app_web_running", f"http://{args.host}:{args.port}"))
+                logger.info(gt("app_scheduler_takeover"))
+                logger.info(gt("app_ctrl_c_exit"))
                 try:
                     while True:
                         time.sleep(1)
                 except KeyboardInterrupt:
-                    logger.info("\n用户中断，程序退出")
+                    logger.info("\n" + gt("app_user_interrupt"))
                 return 0
 
-            logger.info("模式: 定时任务")
-            logger.info(f"每日执行时间: {config.schedule_time}")
+            logger.info(gt("app_mode_schedule"))
+            logger.info(gt("app_daily_exec_time", config.schedule_time))
 
             # Determine whether to run immediately:
             # Command line arg --no-run-immediately overrides config if present.
@@ -1445,7 +1444,7 @@ def main() -> int:
             if getattr(args, 'no_run_immediately', False):
                 should_run_immediately = False
 
-            logger.info(f"启动时立即执行: {should_run_immediately}")
+            logger.info(gt("app_run_immediately", should_run_immediately))
 
             from src.scheduler import run_with_schedule
             scheduled_stock_codes = _resolve_scheduled_stock_codes(stock_codes)
@@ -1467,7 +1466,7 @@ def main() -> int:
                     stats = alert_worker.run_once()
                     triggered_count = stats.get("triggered", 0)
                     if triggered_count:
-                        logger.info("[EventMonitor] 本轮触发 %d 条提醒", triggered_count)
+                        logger.info(gt("app_event_monitor", triggered_count))
 
                 background_tasks.append({
                     "task": event_monitor_task,
@@ -1493,14 +1492,14 @@ def main() -> int:
         if config.run_immediately:
             _run_analysis_with_runtime_scheduler_lock(config, args, stock_codes)
         else:
-            logger.info("配置为不立即运行分析 (RUN_IMMEDIATELY=false)")
+            logger.info(gt("app_not_run_immediately"))
 
-        logger.info("\n程序执行完成")
+        logger.info("\n" + gt("app_execution_complete"))
 
         # 如果启用了服务且是非定时任务模式，保持程序运行
         keep_running = start_serve and not (args.schedule or config.schedule_enabled)
         if keep_running:
-            logger.info("API 服务运行中 (按 Ctrl+C 退出)...")
+            logger.info(gt("app_api_running"))
             try:
                 while True:
                     time.sleep(1)
@@ -1510,11 +1509,11 @@ def main() -> int:
         return 0
 
     except KeyboardInterrupt:
-        logger.info("\n用户中断，程序退出")
+        logger.info("\n" + gt("app_user_interrupt"))
         return 130
 
     except Exception as e:
-        logger.exception(f"程序执行失败: {e}")
+        logger.exception(gt("app_program_failed", e))
         return 1
 
 
