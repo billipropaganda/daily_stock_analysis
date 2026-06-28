@@ -150,25 +150,27 @@ class ChannelDetector:
     """
 
     @staticmethod
-    def get_channel_name(channel: NotificationChannel) -> str:
-        """获取渠道中文名称"""
-        names = {
-            NotificationChannel.WECHAT: "企业微信",
-            NotificationChannel.FEISHU: "飞书",
-            NotificationChannel.TELEGRAM: "Telegram",
-            NotificationChannel.EMAIL: "邮件",
-            NotificationChannel.PUSHOVER: "Pushover",
-            NotificationChannel.NTFY: "ntfy",
-            NotificationChannel.GOTIFY: "Gotify",
-            NotificationChannel.PUSHPLUS: "PushPlus",
-            NotificationChannel.SERVERCHAN3: "Server酱3",
-            NotificationChannel.CUSTOM: "自定义Webhook",
-            NotificationChannel.DISCORD: "Discord机器人",
-            NotificationChannel.SLACK: "Slack",
-            NotificationChannel.ASTRBOT: "ASTRBOT机器人",
-            NotificationChannel.UNKNOWN: "未知渠道",
+    def get_channel_name(channel: NotificationChannel, language: Optional[str] = None) -> str:
+        """Get localized channel display name."""
+        from src.report_language import gt as _gt
+        key_map = {
+            NotificationChannel.WECHAT: "notif_channel_wechat",
+            NotificationChannel.FEISHU: "notif_channel_feishu",
+            NotificationChannel.TELEGRAM: "notif_channel_telegram",
+            NotificationChannel.EMAIL: "notif_channel_email",
+            NotificationChannel.SLACK: "notif_channel_slack",
+            NotificationChannel.PUSHOVER: "notif_channel_pushover",
+            NotificationChannel.NTFY: "notif_channel_ntfy",
+            NotificationChannel.GOTIFY: "notif_channel_gotify",
+            NotificationChannel.PUSHPLUS: "notif_channel_pushplus",
+            NotificationChannel.SERVERCHAN3: "notif_channel_serverchan3",
+            NotificationChannel.CUSTOM: "notif_channel_custom",
+            NotificationChannel.DISCORD: "notif_channel_discord",
+            NotificationChannel.ASTRBOT: "notif_channel_astrbot",
+            NotificationChannel.UNKNOWN: "notif_channel_unknown",
         }
-        return names.get(channel, "未知渠道")
+        key = key_map.get(channel, "notif_channel_unknown")
+        return _gt(key, language=language)
 
 
 class NotificationService(
